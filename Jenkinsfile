@@ -1,50 +1,60 @@
 pipeline {
-    // Chỉ định Agent để chạy. Nếu bạn chạy ngay trên máy Jenkins Windows, dùng 'master'
-    // Hoặc dùng một label của Agent Windows bạn đã cấu hình (ví dụ: 'windows-agent')
-    agent { label 'master' } 
+    // Chỉ định Agent để chạy. Thay 'windows-agent' bằng label phù hợp với máy Jenkins của bạn.
+    agent { label 'windows-agent' } 
 
-    // Các biến môi trường chung
+    // Các biến môi trường
     environment {
-        // Thay đổi URL và Token này cho phù hợp với SonarQube Server của bạn
-        SONAR_SCANNER_HOME = tool 'SonarQubeScanner' // Phải cấu hình trong Jenkins Global Tool Configuration
-        SONAR_URL = 'http://localhost:9000'
+        // Cần cấu hình SonarQube Scanner Tool trong Jenkins Global Tool Configuration
+        SONAR_SCANNER_HOME = tool 'SonarQubeScanner' 
+        SONAR_URL = 'http://your-sonarqube-server:9000' // Thay thế URL thực tế
+
+        // Tên dự án SonarQube. Đổi 'sample-node-app' thành tên dự án của bạn
+        SONAR_PROJECT_KEY = 'sample-node-app' 
         
-        // Tên image và tag của ứng dụng
-        DOCKER_IMAGE = "my-app-image:${BUILD_ID}"
+        // Tên image Docker
+        DOCKER_IMAGE = "registry-url/your-repo/sample-node-app:${BUILD_ID}"
     }
 
     stages {
+        
         // --- 1. SCM & BUILD ---
         stage('Source & Build') {
             steps {
-                // Kéo mã nguồn
+                echo 'Checking out source code...'
                 checkout scm
                 
-                // Giả sử đây là ứng dụng Maven
-                bat 'mvn clean package' // Hoặc các lệnh build tương ứng với ngôn ngữ của bạn
+                // Cài đặt các thư viện Node.js
+                bat 'npm install' 
+                
+                // Nếu dự án của bạn có bước build/bundle (ví dụ: webpack/babel), bạn sẽ thêm lệnh đó tại đây
+                // bat 'npm run build' 
             }
         }
         
-        // --- 2. SAST (SonarQube) ---
-        stage('Static Analysis (SAST)') {
+        // --- 2. SCA (Dependency-Check) ---
+        stage('Dependency Check (SCA)') {
             steps {
-                // SonarQube Analysis
-                withSonarQubeEnv('My SonarQube Server') { // Thay 'My SonarQube Server' bằng tên cấu hình trong Jenkins
-                    bat "${SONAR_SCANNER_HOME}\\bin\\sonar-scanner.bat -Dsonar.projectKey=MyProject -Dsonar.sources=."
+                echo 'Running OWASP Dependency-Check for known vulnerabilities...'
+                // Dùng scan type phù hợp. 'npm' quét dependencies của Node.js
+                // **LỖI ĐÃ ĐƯỢC SỬA**: Chỉ gọi dependencyCheck() hoặc truyền additionalArguments hợp lệ.
+                dependencyCheck scanType: 'NPM', additionalArguments: '--project "NodeApp"'
+            }
+            post {
+                always {
+                    // Xuất bản báo cáo Dependency-Check
+                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
                 }
             }
         }
         
-        // --- 3. SCA (Dependency-Check) ---
-        stage('Dependency Check (SCA)') {
+        // --- 3. SAST (SonarQube) ---
+        stage('Static Analysis (SAST)') {
             steps {
-                // Quét lỗ hổng thư viện (sử dụng plugin)
-                dependencyCheck additionalArguments: '--scan ./target', skipPublishing: true
-            }
-            // Thêm một bước post để publish báo cáo Dependency-Check sau khi hoàn tất stage
-            post {
-                always {
-                    dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                echo 'Running SonarQube Static Analysis...'
+                // 'My SonarQube Server' phải khớp với tên cấu hình trong Jenkins -> Configure System
+                withSonarQubeEnv('My SonarQube Server') { 
+                    // Lệnh chạy SonarScanner. properties file sẽ được tự động tìm kiếm hoặc bạn có thể chỉ định
+                    bat "${SONAR_SCANNER_HOME}\\bin\\sonar-scanner.bat -Dsonar.projectKey=${SONAR_PROJECT_KEY} -Dsonar.sources=."
                 }
             }
         }
@@ -52,39 +62,48 @@ pipeline {
         // --- 4. Quality Gate & Package ---
         stage('Quality Gate & Docker Build') {
             steps {
-                // Chờ SonarQube kiểm tra kết quả (quan trọng)
-                timeout(time: 1, unit: 'HOURS') {
+                echo 'Waiting for SonarQube Quality Gate result...'
+                // Chờ SonarQube trả về kết quả. Nếu Quality Gate thất bại, pipeline sẽ dừng.
+                timeout(time: 15, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
                 
+                echo 'Building Docker Image...'
                 // Đóng gói ứng dụng vào Docker Image
+                // Lệnh Windows (bat) cho Docker
                 bat "docker build -t ${DOCKER_IMAGE} ." 
+                
+                echo 'Pushing Docker Image to Registry...'
+                bat "docker push ${DOCKER_IMAGE}"
             }
         }
         
-        // --- 5. DAST & DEPLOY ---
+        // --- 5. DAST & Deploy to Test ---
         stage('Deploy to Test & DAST') {
             steps {
-                echo 'Triển khai lên môi trường Test...'
-                // Ví dụ: Triển khai Docker Container lên localhost hoặc máy chủ Test
-                bat "docker run -d --name test-app -p 8080:8080 ${DOCKER_IMAGE}"
+                echo 'Deploying application to temporary test environment (Port 8080)...'
+                // Chạy ứng dụng bằng Docker (ví dụ đơn giản)
+                bat "docker run -d --name test-app-$$ -p 8080:3000 ${DOCKER_IMAGE}" // Giả sử Node app chạy ở port 3000
                 
-                echo 'Chạy OWASP ZAP (DAST)...'
-                // Ở đây bạn cần chạy ZAP theo kiểu CLI hoặc gọi API của ZAP.
-                // Đây là một ví dụ giả lập, việc tích hợp ZAP thực tế phức tạp hơn.
-                bat 'echo "Running OWASP ZAP Scan against http://localhost:8080"'
+                echo 'Running OWASP ZAP (DAST) Scan...'
+                // Đây là ví dụ giả định. Bạn cần cấu hình ZAP CLI hoặc ZAP Jenkins Plugin tại đây.
+                // Thường sẽ là một lệnh 'bat' gọi ZAP để quét http://localhost:8080.
+                bat 'echo "Execute ZAP Scan against http://localhost:8080 here"' 
                 
-                // Dọn dẹp
-                bat 'docker rm -f test-app'
+                echo 'Cleaning up test container...'
+                bat 'docker rm -f test-app-$$'
             }
         }
 
         // --- 6. Final Deployment ---
-        stage('Deploy to Staging/Prod') {
+        stage('Deploy to Prod') {
+            when {
+                // Chỉ chạy khi stage trước đó thành công
+                expression { return currentBuild.result == 'SUCCESS' }
+            }
             steps {
-                // Triển khai lên môi trường Production nếu tất cả các bước trên thành công
-                echo 'Deploying to Production...'
-                // Thêm các lệnh deploy production thực tế tại đây
+                echo 'Deploying to Production Environment...'
+                // Các lệnh triển khai Production thực tế của bạn
             }
         }
     }
