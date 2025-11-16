@@ -1,10 +1,22 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs "node18"
+    }
+
+    environment {
+        APP_NAME = "sample-node-app"
+        DOCKER_IMAGE = "sample-node-app-image"
+    }
+
     stages {
-        stage('Checkout') {
+
+        stage('Checkout Source') {
             steps {
-                git url: 'https://github.com/dung2609-lang/sample-node-app.git', credentialsId: 'github-token'
+                git credentialsId: 'github-token',
+                    url: 'https://github.com/dung2609-lang/sample-node-app.git',
+                    branch: 'main'
             }
         }
 
@@ -14,18 +26,33 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Run Tests') {
             steps {
-                bat 'docker build -t sample-node-app .'
+                bat 'npm test'
             }
         }
 
-        stage('Run Container') {
+        stage('Build Docker Image') {
             steps {
-                bat 'docker stop sample-node-app || echo "container not running"'
-                bat 'docker rm sample-node-app || echo "container not exist"'
-                bat 'docker run -d -p 3000:3000 --name sample-node-app sample-node-app'
+                bat "docker build -t %DOCKER_IMAGE% ."
             }
+        }
+
+        stage('Docker Run (Deploy)') {
+            steps {
+                // Stop old container if exists
+                bat 'docker stop sample-node-app || true'
+                bat 'docker rm sample-node-app || true'
+
+                // Run new container
+                bat "docker run -d --name sample-node-app -p 3000:3000 %DOCKER_IMAGE%"
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline finished."
         }
     }
 }
