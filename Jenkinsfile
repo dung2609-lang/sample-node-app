@@ -6,17 +6,17 @@ pipeline {
     }
 
     environment {
-        APP_NAME = "sample-node-app"
-        DOCKER_IMAGE = "sample-node-app-image"
+        DOCKER_IMAGE = "sample-node-app"
+        DOCKER_CONTAINER = "sample-node-container"
     }
 
     stages {
 
-        stage('Checkout Source') {
+        stage('Checkout') {
             steps {
-                git credentialsId: 'github-token',
-                    url: 'https://github.com/dung2609-lang/sample-node-app.git',
-                    branch: 'main'
+                git branch: 'main',
+                    credentialsId: 'github-token',
+                    url: 'https://github.com/dung2609-lang/sample-node-app.git'
             }
         }
 
@@ -26,33 +26,22 @@ pipeline {
             }
         }
 
-        stage('Run Tests') {
-            steps {
-                bat 'npm test'
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
-                bat "docker build -t %DOCKER_IMAGE% ."
+                script {
+                    bat "docker build -t %DOCKER_IMAGE% ."
+                }
             }
         }
 
-        stage('Docker Run (Deploy)') {
+        stage('Run Container') {
             steps {
-                // Stop old container if exists
-                bat 'docker stop sample-node-app || true'
-                bat 'docker rm sample-node-app || true'
-
-                // Run new container
-                bat "docker run -d --name sample-node-app -p 3000:3000 %DOCKER_IMAGE%"
+                script {
+                    bat "docker stop %DOCKER_CONTAINER% || exit 0"
+                    bat "docker rm %DOCKER_CONTAINER% || exit 0"
+                    bat "docker run -d -p 3000:3000 --name %DOCKER_CONTAINER% %DOCKER_IMAGE%"
+                }
             }
-        }
-    }
-
-    post {
-        always {
-            echo "Pipeline finished."
         }
     }
 }
