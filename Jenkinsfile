@@ -28,19 +28,15 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    bat "docker build -t %DOCKER_IMAGE% ."
-                }
+                bat "docker build -t %DOCKER_IMAGE% ."
             }
         }
 
-        stage('Run Container') {
+        stage('Deploy Container') {
             steps {
-                script {
-                    bat "docker stop %DOCKER_CONTAINER% || exit 0"
-                    bat "docker rm %DOCKER_CONTAINER% || exit 0"
-                    bat "docker run -d -p 3000:3000 --name %DOCKER_CONTAINER% %DOCKER_IMAGE%"
-                }
+                bat "docker stop %DOCKER_CONTAINER% || exit 0"
+                bat "docker rm %DOCKER_CONTAINER% || exit 0"
+                bat "docker run -d -p 3000:3000 --name %DOCKER_CONTAINER% %DOCKER_IMAGE%"
             }
         }
     }
