@@ -4,6 +4,8 @@ pipeline {
     environment {
         SONAR_HOST_URL = 'http://localhost:9000'
         SONAR_TOKEN = credentials('sonar-token')
+        DEP_REPORT = "reports/dependency-check-report.html"
+        ZAP_REPORT = "reports/zap-report.html"
     }
 
     stages {
@@ -27,34 +29,72 @@ pipeline {
                 echo "Running SonarQube Scan..."
                 withSonarQubeEnv('sonarqube') {
                     bat """
-                        sonar-scanner -Dsonar.projectKey=sample-node -Dsonar.sources=. -Dsonar.host.url=%SONAR_HOST_URL% -Dsonar.login=%SONAR_TOKEN%
+                        sonar-scanner ^
+                        -Dsonar.projectKey=sample-node ^
+                        -Dsonar.sources=. ^
+                        -Dsonar.host.url=%SONAR_HOST_URL% ^
+                        -Dsonar.login=%SONAR_TOKEN%
                     """
                 }
             }
         }
 
+        stage('SCA - OWASP Dependency Check') {
+            steps {
+                echo "Running Dependency-Check..."
+                bat """
+                    dependency-check.bat ^
+                      --project "sample-node" ^
+                      --scan "." ^
+                      --format "HTML" ^
+                      --out "reports"
+                """
+            }
+        }
+
         stage('Build Application') {
             steps {
-                echo "Build step..."
-                bat 'echo No build step'
+                echo "Building application..."
+                bat 'npm run build || echo "No build script"'
+            }
+        }
+
+        stage('Deploy (Local Docker)') {
+            steps {
+                echo "Deploying with Docker..."
+                bat """
+                    docker build -t sample-node-app .
+                    docker stop sample-node-app || echo Not running
+                    docker rm sample-node-app || echo Not exists
+                    docker run -d -p 3000:3000 --name sample-node-app sample-node-app
+                """
+            }
+        }
+
+        stage('DAST - OWASP ZAP') {
+            steps {
+                echo "Running ZAP Baseline Scan..."
+                bat """
+                    docker run --rm -v %cd%/reports:/zap/wrk/ owasp/zap2docker-stable zap-baseline.py ^
+                      -t http://localhost:3000 ^
+                      -r zap-report.html
+                """
             }
         }
 
         stage('Prepare Reports Folder') {
             steps {
-                echo "Creating reports folder..."
-                bat 'if not exist reports mkdir reports'
-                bat 'echo Pipeline OK > reports\\result.txt'
+                echo "Ensuring reports folder exists..."
+                bat 'mkdir reports || echo exists'
+                bat 'echo Pipeline completed > reports/result.txt'
             }
         }
     }
 
     post {
         always {
-            script {
-                echo "Archiving artifacts..."
-                archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
-            }
+            echo "Archiving artifacts..."
+            archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
         }
         failure {
             echo "Build failed - check reports."
