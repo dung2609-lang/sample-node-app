@@ -1,8 +1,6 @@
-const express = require("express");
-const app = express();
+const PORT = 3000;
+const HOST = "0.0.0.0";  // Quan trọng!
 
-app.get("/", (req, res) => {
-  res.send("Demo CI/CD NodeJS OK!");
+app.listen(PORT, HOST, () => {
+    console.log(`Server running at http://${HOST}:${PORT}`);
 });
-
-app.listen(3000, () => console.log("App running on port 3000"));
