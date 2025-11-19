@@ -27,11 +27,7 @@ pipeline {
                 echo "Running SonarQube Scan..."
                 withSonarQubeEnv('sonarqube') {
                     bat """
-                        sonar-scanner ^
-                        -Dsonar.projectKey=sample-node ^
-                        -Dsonar.sources=. ^
-                        -Dsonar.host.url=%SONAR_HOST_URL% ^
-                        -Dsonar.login=%SONAR_TOKEN%
+                        sonar-scanner -Dsonar.projectKey=sample-node -Dsonar.sources=. -Dsonar.host.url=%SONAR_HOST_URL% -Dsonar.login=%SONAR_TOKEN%
                     """
                 }
             }
@@ -40,15 +36,15 @@ pipeline {
         stage('Build Application') {
             steps {
                 echo "Build step..."
-                bat 'npm run build || echo "No build script"'
+                bat 'echo No build step'
             }
         }
 
         stage('Prepare Reports Folder') {
             steps {
                 echo "Creating reports folder..."
-                bat 'mkdir reports'
-                bat 'echo Pipeline OK > reports/result.txt'
+                bat 'if not exist reports mkdir reports'
+                bat 'echo Pipeline OK > reports\\result.txt'
             }
         }
     }
