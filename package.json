@@ -2,9 +2,9 @@
   "name": "sample-node-app",
   "version": "1.0.0",
   "description": "DevSecOps demo app for Jenkins Windows",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node app.js"
   },
   "dependencies": {
     "express": "^4.18.2",
