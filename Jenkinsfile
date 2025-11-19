@@ -48,20 +48,20 @@ pipeline {
             steps {
                 echo "Creating reports folder..."
                 bat 'mkdir reports'
-                bat 'echo "pipeline ok" > reports/result.txt'
+                bat 'echo Pipeline OK > reports/result.txt'
             }
         }
     }
 
     post {
         always {
-            node {
-                echo "Archiving report files..."
+            script {
+                echo "Archiving artifacts..."
                 archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
             }
         }
         failure {
-            echo "Build failed - check console and reports."
+            echo "Build failed - check reports."
         }
         success {
             echo "Build completed successfully!"
