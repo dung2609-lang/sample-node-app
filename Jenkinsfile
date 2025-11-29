@@ -42,6 +42,8 @@ pipeline {
                 script {
                     echo '--- Scanning Code Quality ---'
                     def scannerHome = tool SCANNER_TOOL
+                    
+                    // 1. Quét và đẩy code lên SonarQube
                     withSonarQubeEnv('SonarQube') { 
                         bat """
                             "${scannerHome}/bin/sonar-scanner" ^
@@ -49,6 +51,16 @@ pipeline {
                             -Dsonar.sources=. ^
                             -Dsonar.host.url=http://localhost:9000
                         """
+                    }
+
+                    // 2. [MỚI THÊM] Chờ kết quả Quality Gate
+                    // Nếu Status khác 'OK', pipeline sẽ báo lỗi và dừng lại.
+                    echo '--- Waiting for Quality Gate ---'
+                    timeout(time: 5, unit: 'MINUTES') {
+                        def qg = waitForQualityGate()
+                        if (qg.status != 'OK') {
+                            error "Pipeline bị hủy do không đạt chuẩn Quality Gate: ${qg.status}"
+                        }
                     }
                 }
             }
@@ -67,7 +79,7 @@ pipeline {
             }
         }
 
-      stage('DAST: OWASP ZAP') {
+        stage('DAST: OWASP ZAP') {
             steps {
                 script {
                     echo '--- Starting ZAP Scan ---'
